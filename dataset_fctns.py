@@ -4,6 +4,11 @@ import xarray as xr
 import cartopy.crs as ccrs
 from PIL import Image
 
+def columns_to_datetime(ds, columns):
+    for colname in columns:
+        ds[colname] = pd.to_datetime(ds[colname], format='mixed')
+    return ds
+
 def read_phen_dataset(adress, drop_list = []):
     phen_data = pd.read_csv(adress, encoding = "latin1", engine='python', sep = r';\s+|;\t+|;\s+\t+|;\t+\s+|;|\s+;|\t+;|\s+\t+;|\t+\s+;')
     for drop_name in drop_list:
