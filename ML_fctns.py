@@ -252,7 +252,9 @@ def dl_variance(dl):
         running_len += len(yb)
     return running_var/(running_len - 1)
 
-def fit(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_model', CNN = False, bce=False):
+    
+
+def fit(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_model', CNN = False, bce=False, MMD = False, MMD_loss = None):
     # Variables to store training history
     train_losses = []
     val_losses = []
@@ -267,7 +269,7 @@ def fit(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_mod
         running_var_val = 0
 
         for xb, yb in train_dl:
-            batch_loss, batch_len = loss_batch(model, loss_func, xb, yb, opt, CNN=CNN, bce=bce)
+            batch_loss, batch_len = loss_batch(model, loss_func, xb, yb, opt, CNN=CNN, bce=bce, MMD = MMD, MMD_loss = MMD_loss)
             running_loss += batch_loss*batch_len
             running_samples += batch_len
 
@@ -276,7 +278,7 @@ def fit(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_mod
         model.eval()
         with torch.no_grad():
             losses, nums = zip(
-                *[loss_batch(model, loss_func, xb, yb, CNN=CNN, bce=bce) for xb, yb in valid_dl]
+                *[loss_batch(model, loss_func, xb, yb, CNN=CNN, bce=bce, MMD = MMD, MMD_loss = MMD_loss) for xb, yb in valid_dl]
             )
             
         val_loss = np.sum(np.multiply(losses, nums)) / np.sum(nums)
@@ -291,16 +293,11 @@ def fit(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_mod
 
         #Save the model at the last epoch
         if epoch == epochs - 1:
-            #torch.save(model.state_dict(), 'saved_models/last_test.pth')
             model_dir = 'C:\\Users\\wlwc1989\\Documents\\Phenology_Test_Notebooks\\ML_algorithms\\saved_models\\'
             model_path = os.path.join(model_dir, save_name + ".pt")
-            #torch.save(model.state_dict(), model_path)
             torch.save({'epoch': best_epoch, 'model_state_dict': best_model_state}, model_path)
         if epoch % 5 == 0:
-            #train_r2 = 1 - ((train_loss**2)/train_var)
-            #val_r2 = 1 - ((val_loss**2)/val_var)
             print(epoch, train_loss, val_loss)
-            #print(f'R2 on train set: {train_r2}\nR2 on test set: {val_r2}')
     plot_train_val_loss(epochs, train_losses, val_losses, best_epoch)
 
 class Lambda(nn.Module):
@@ -640,9 +637,11 @@ def K_fold_transfer(k_folds, train_ds, model_class, savename, epochs, bs, model_
         model_path = os.path.join(model_dir, savename + ".pt")
         checkpoint = torch.load(model_path, weights_only=True)
         model.load_state_dict(checkpoint['model_state_dict'])
-        for param in model.fc.parameters():
-            param.requires_grad = False
-        for param in model.lstm.parameters():
+        #for param in model.fc.parameters():
+        #    param.requires_grad = False
+        #for param in model.lstm.parameters():
+        #    param.requires_grad = False
+        for param in model.parameters():
             param.requires_grad = False
         for param in [model.u0, model.u1, model.u2, model.u3, model.p0]:
             param.requires_grad = True
