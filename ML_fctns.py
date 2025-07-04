@@ -205,10 +205,15 @@ def sample_augmented_frame(ds_inputs):
             ds_augmented.loc[row_index, f'observed time to {phase}'] = pd.to_timedelta(ds_inputs.loc[row_index, f'observed time to {phase}']) + np.timedelta64(60 - augmented_start, 'D')
     return ds_augmented
 
-def loss_batch(model, loss_func, xb, yb, opt=None, CNN=False, bce=False):
+def loss_batch(model, loss_func, xb, yb, opt=None, CNN=False, bce=False, MMD=False, MMD_loss = None):
     if CNN:
-        outputs = model(xb)
-        loss = loss_func(torch.squeeze(outputs.transpose(1, 2)), torch.squeeze(yb.float()))
+        if MMD:
+            outputs, transferred_x, target_x = model(xb)
+            loss = loss_func(torch.squeeze(outputs.transpose(1, 2)), torch.squeeze(yb.float())) + MMD_loss(transferred_x, target_x)
+        else:
+            outputs = model(xb)
+            #print(torch.squeeze(outputs.transpose(1, 2)).shape, torch.squeeze(yb.float()).shape, (torch.squeeze(outputs.transpose(1, 2)) - torch.squeeze(yb.float())))
+            loss = loss_func(torch.squeeze(outputs.transpose(1, 2)), torch.squeeze(yb.float()))
     elif bce:
         outputs = model(xb.transpose(1, 2))
         #print(outputs.shape)
@@ -222,10 +227,10 @@ def loss_batch(model, loss_func, xb, yb, opt=None, CNN=False, bce=False):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 100)
         opt.step()
         opt.zero_grad()
-
+    #print(loss.item())
     return loss.item(), len(xb)
 
-def plot_train_val_loss(num_epochs, train_losses, val_losses, best_epoch):
+def plot_train_val_loss(num_epochs, train_losses, val_losses, best_epoch, max_y=40):
 
     epochs = range(1, num_epochs + 1)
     # Plot Losses
@@ -236,7 +241,7 @@ def plot_train_val_loss(num_epochs, train_losses, val_losses, best_epoch):
     fig.suptitle('Loss vs Epoch')
     ax.set_xlabel('Epochs')
     ax.set_ylabel('Loss')
-    ymax = min((np.array(val_losses)[:20].max())*1.05, 40)
+    ymax = min((np.array(val_losses)[:20].max())*1.05, max_y)
     ymin = (np.array(val_losses).min())*0.95
     ax.set_ylim([ymin, ymax])
     plt.legend()
@@ -363,7 +368,7 @@ def plot_fitted_observed(TS_model, dl):
     variance_modelled = comparison_frame[f'fitted'].var()
     print(f'Bias: {bias**2}\nVariance of modelled values: {variance_modelled}')
 
-def plot_from_saved(savename, model, val_dl, method = 'regression', bce=False, CNN=False, title = 'fitted vs. observed'):
+def plot_from_saved(savename, model, val_dl, method = 'regression', bce=False, CNN=False, title = 'fitted vs. observed', MMD=False):
     model_dir = 'C:\\Users\\wlwc1989\\Documents\\Phenology_Test_Notebooks\\ML_algorithms\\saved_models\\'
     model_path = os.path.join(model_dir, savename + ".pt")
     checkpoint = torch.load(model_path, weights_only=True)
@@ -371,84 +376,22 @@ def plot_from_saved(savename, model, val_dl, method = 'regression', bce=False, C
     print(checkpoint['model_state_dict'])
     #optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     if method == 'cumulative':
-        plot_fitted_observed_cumulative(model, val_dl, bce=bce, CNN=CNN, title=title)
+        plot_fitted_observed_cumulative(model, val_dl, bce=bce, CNN=CNN, title=title, MMD=MMD)
     elif method == 'regression':
-        plot_fitted_observed_TS(model, val_dl, bce=bce, CNN=CNN, title=title)
+        plot_fitted_observed_TS(model, val_dl, bce=bce, CNN=CNN, title=title, MMD=MMD)
     elif method == 'histogram':
-        plot_fitted_observed_histogram(model, val_dl, bce=bce, CNN=CNN, title=title)
-        
-def plot_fitted_observed_cumulative(TS_model, dl, bce=False, CNN=False, title = 'fitted vs. observed'):
-    list_logs = []
-    list_observed = []
-    for xb, yb in dl:
-        with torch.no_grad():
-            if CNN:
-                list_logs.append(TS_model(xb))
-            else:
-                list_logs.append(TS_model(xb.transpose(1, 2)))
-            #print(TS_model(xb.transpose(1, 2)))
-        list_observed.append(yb)
-    logs = torch.cat(list_logs)
-    if bce:
-        fitted = torch.round(logs)
-    else:
-        fitted = torch.argmax(logs, dim=2)
-    L = fitted.shape[1]
-    fitted_proportions = fitted.to(torch.float).mean(dim=0)
-    observed = torch.cat(list_observed)
-    observed_proportions = observed.to(torch.float).mean(dim=0)
-    fig, ax = plt.subplots()
-    ax.plot(fitted_proportions, color = 'red', label = 'fitted')
-    ax.plot(observed_proportions, color = 'blue', label = 'observed')
-    ax.set_title(title)
-    fig.legend(bbox_to_anchor = (1.1, 0.6))
+        plot_fitted_observed_histogram(model, val_dl, bce=bce, CNN=CNN, title=title, MMD=MMD)
     
-def plot_fitted_observed_histogram(TS_model, dl, bce=False, CNN=False, title = 'fitted vs. observed'):
+def plot_fitted_observed_TS(TS_model, dl, bce=False, CNN=False, title = 'fitted vs. observed', MMD = False):
     list_logs = []
     list_observed = []
     for xb, yb in dl:
         with torch.no_grad():
             if CNN:
-                list_logs.append(TS_model(xb))
-            else:
-                list_logs.append(TS_model(xb.transpose(1, 2)))
-            #print(TS_model(xb.transpose(1, 2)))
-        list_observed.append(yb)
-    logs = torch.cat(list_logs)
-    if bce:
-        fitted = torch.round(logs)
-    else:
-        fitted = torch.argmax(logs, dim=2)
-    L = fitted.shape[1]
-    fitted_days = L - fitted.sum(dim=1)
-    observed = torch.cat(list_observed)
-    observed_days = L - observed.sum(dim=1)
-    comparison_frame = pd.DataFrame({'fitted': fitted_days.numpy().squeeze(), 'observed': observed_days.numpy().squeeze()})
-    #comparison_frame = comparison_frame.loc[comparison_frame['fitted'] <= 90]
-    maxval = max(comparison_frame['fitted'].max(), comparison_frame['observed'].max())
-    minval = min(comparison_frame['fitted'].min(), comparison_frame['observed'].min())
-    fig, ax = plt.subplots()
-    sns.histplot(x='fitted', data = comparison_frame, ax=ax, label = 'fitted',
-                stat = 'density')
-    sns.histplot(x='observed', data = comparison_frame, ax=ax, label= 'observed',
-                stat = 'density')
-    ax.set_xlabel('Days to anthesis')
-    ax.set_title(title)
-    #ax.plot([minval, maxval], [minval, maxval], linestyle = '--', color='k')
-    fig.legend(bbox_to_anchor = (1.2, 0.9))
-    rsquared = r2_score(comparison_frame['observed'], comparison_frame['fitted'])
-    print(f'R^2 value for model: {rsquared}')
-    bias = comparison_frame['observed'].mean() - comparison_frame['fitted'].mean()
-    variance_modelled = comparison_frame[f'fitted'].var()
-    print(f'Bias: {bias**2}\nVariance of modelled values: {variance_modelled}')
-    
-def plot_fitted_observed_TS(TS_model, dl, bce=False, CNN=False, title = 'fitted vs. observed'):
-    list_logs = []
-    list_observed = []
-    for xb, yb in dl:
-        with torch.no_grad():
-            if CNN:
-                list_logs.append(TS_model(xb))
+                if MMD:
+                    list_logs.append(TS_model(xb)[0])
+                else:
+                    list_logs.append(TS_model(xb))
             else:
                 list_logs.append(TS_model(xb.transpose(1, 2)))
             #print(TS_model(xb.transpose(1, 2)))
@@ -477,6 +420,76 @@ def plot_fitted_observed_TS(TS_model, dl, bce=False, CNN=False, title = 'fitted 
     bias = comparison_frame['observed'].mean() - comparison_frame['fitted'].mean()
     variance_modelled = comparison_frame[f'fitted'].var()
     print(f'Bias: {bias**2}\nVariance of modelled values: {variance_modelled}')
+
+def plot_fitted_observed_histogram(TS_model, dl, bce=False, CNN=False, title = 'fitted vs. observed', MMD=False):
+    list_logs = []
+    list_observed = []
+    for xb, yb in dl:
+        with torch.no_grad():
+            if CNN:
+                if MMD:
+                    list_logs.append(TS_model(xb)[0])
+                else:
+                    list_logs.append(TS_model(xb))
+            else:
+                list_logs.append(TS_model(xb.transpose(1, 2)))
+            #print(TS_model(xb.transpose(1, 2)))
+        list_observed.append(yb)
+    logs = torch.cat(list_logs).squeeze()
+    #print(logs.shape)
+    if bce:
+        fitted = torch.round(logs)
+    else:
+        fitted = torch.argmax(logs, dim=2)
+    L = fitted.shape[1]
+    fitted_days = L - fitted.sum(dim=1)
+    observed = torch.cat(list_observed)
+    observed_days = L - observed.sum(dim=1)
+    comparison_frame = pd.DataFrame({'fitted': fitted_days.numpy().squeeze(), 'observed': observed_days.numpy().squeeze()})
+    #comparison_frame = comparison_frame.loc[comparison_frame['fitted'] <= 90]
+    maxval = max(comparison_frame['fitted'].max(), comparison_frame['observed'].max())
+    minval = min(comparison_frame['fitted'].min(), comparison_frame['observed'].min())
+    fig, ax = plt.subplots()
+    sns.histplot(x='fitted', data = comparison_frame, ax=ax, label = 'fitted',
+                stat = 'density', bins=10)
+    sns.histplot(x='observed', data = comparison_frame, ax=ax, label= 'observed',
+                stat = 'density')
+    ax.set_xlabel('Days to anthesis')
+    ax.set_title(title)
+    #ax.plot([minval, maxval], [minval, maxval], linestyle = '--', color='k')
+    fig.legend(bbox_to_anchor = (1.2, 0.9))
+    rsquared = r2_score(comparison_frame['observed'], comparison_frame['fitted'])
+    print(f'R^2 value for model: {rsquared}')
+    bias = comparison_frame['observed'].mean() - comparison_frame['fitted'].mean()
+    variance_modelled = comparison_frame[f'fitted'].var()
+    print(f'Bias: {bias**2}\nVariance of modelled values: {variance_modelled}')
+
+def plot_fitted_observed_cumulative(TS_model, dl, bce=False, CNN=False, title = 'fitted vs. observed'):
+    list_logs = []
+    list_observed = []
+    for xb, yb in dl:
+        with torch.no_grad():
+            if CNN:
+                list_logs.append(TS_model(xb))
+            else:
+                list_logs.append(TS_model(xb.transpose(1, 2)))
+            #print(TS_model(xb.transpose(1, 2)))
+        list_observed.append(yb)
+    logs = torch.cat(list_logs)
+    if bce:
+        fitted = torch.round(logs)
+    else:
+        fitted = torch.argmax(logs, dim=2)
+    L = fitted.shape[1]
+    fitted_proportions = fitted.to(torch.float).mean(dim=0)
+    observed = torch.cat(list_observed)
+    observed_proportions = observed.to(torch.float).mean(dim=0)
+    fig, ax = plt.subplots()
+    ax.plot(fitted_proportions, color = 'red', label = 'fitted')
+    ax.plot(observed_proportions, color = 'blue', label = 'observed')
+    ax.set_title(title)
+    fig.legend(bbox_to_anchor = (1.1, 0.6))
+
 
 def fit_for_kf(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_model', plot_opt = False, CNN=False, bce=False):
     # Variables to store training history
