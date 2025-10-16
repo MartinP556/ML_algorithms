@@ -21,10 +21,10 @@ import cartopy.io.shapereader as shpreader
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision
+#import torchvision
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader, random_split
-import torchinfo
+#import torchinfo
 
 import warnings
 import os
@@ -495,7 +495,7 @@ def fit_for_kf(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'b
     # Variables to store training history
     train_losses = []
     val_losses = []
-    best_loss = 100
+    best_loss = 1000
     best_epoch = 0
 
     for epoch in range(epochs):
