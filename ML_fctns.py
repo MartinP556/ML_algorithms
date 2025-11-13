@@ -263,7 +263,7 @@ def fit(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_mod
     # Variables to store training history
     train_losses = []
     val_losses = []
-    best_loss = 100
+    best_loss = 50000
     best_epoch = 0
 
     for epoch in range(epochs):
@@ -303,7 +303,7 @@ def fit(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_mod
             torch.save({'epoch': best_epoch, 'model_state_dict': best_model_state}, model_path)
         if epoch % 5 == 0:
             print(epoch, train_loss, val_loss)
-    plot_train_val_loss(epochs, train_losses, val_losses, best_epoch)
+    plot_train_val_loss(epochs, train_losses, val_losses, best_epoch, max_y = 200)
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -532,7 +532,7 @@ def fit_for_kf(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'b
             model_dir = 'C:\\Users\\wlwc1989\\Documents\\Phenology_Test_Notebooks\\ML_algorithms\\saved_models\\'
             model_path = os.path.join(model_dir, save_name + ".pt")
             torch.save({'epoch': best_epoch, 'model_state_dict': best_model_state}, model_path)
-    print(f'Loss: {best_loss}')
+    #print(f'Loss: {best_loss}')
     if plot_opt:
         plot_train_val_loss(epochs, train_losses, val_losses, best_epoch)
     return model_loss
