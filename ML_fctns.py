@@ -495,7 +495,7 @@ def fit_for_kf(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'b
     # Variables to store training history
     train_losses = []
     val_losses = []
-    best_loss = 1000
+    best_loss = 100000
     best_epoch = 0
 
     for epoch in range(epochs):
