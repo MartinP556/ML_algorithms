@@ -491,7 +491,7 @@ def plot_fitted_observed_cumulative(TS_model, dl, bce=False, CNN=False, title = 
     fig.legend(bbox_to_anchor = (1.1, 0.6))
 
 
-def fit_for_kf(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_model', plot_opt = False, CNN=False, bce=False):
+def fit_for_kf(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'best_model', plot_opt = False, CNN=False, bce=False, verbose=False):
     # Variables to store training history
     train_losses = []
     val_losses = []
@@ -532,6 +532,9 @@ def fit_for_kf(epochs, model, loss_func, opt, train_dl, valid_dl, save_name = 'b
             model_dir = 'C:\\Users\\wlwc1989\\Documents\\Phenology_Test_Notebooks\\ML_algorithms\\saved_models\\'
             model_path = os.path.join(model_dir, save_name + ".pt")
             torch.save({'epoch': best_epoch, 'model_state_dict': best_model_state}, model_path)
+        
+        if verbose and epoch % 10 == 0:
+            print(epoch, train_loss, val_loss)
     #print(f'Loss: {best_loss}')
     if plot_opt:
         plot_train_val_loss(epochs, train_losses, val_losses, best_epoch)
